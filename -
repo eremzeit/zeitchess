@@ -1,0 +1,165 @@
+import array
+import itertools
+from const import *
+from butils import * 
+import pdb
+
+
+class ZBoard:
+    """
+        Models the full state of the board including meta-information.
+    """
+    def __init__ (self, variant = 0):
+        self.Reset()
+        self.variant = variant
+    
+    def Reset (self):
+        #   Bitboards
+        self.board = CreateBoard(0) #all pieces
+        self.teamBoards = MultiDimList((2,), lambda: CreateBoard(0))  #pieces for each team
+        #self.teamBoards = [CreateBoard(0) for color in (WHITE, BLACK)]  #pieces for each team
+        self.pieceBoards = MultiDimList((2,6), lambda: CreateBoard(0))  #pieces for each team
+        #self.pieceBoards = [ [ CreateBoard(0) for pclass in xrange(6)] for color in [WHITE,BLACK]]
+        self.kings = MultiDimList((2,), lambda: CreateBoard(0))  #pieces for each team
+        
+        print EMPTY
+        self.squares = MultiDimList((8,8), lambda: EMPTY) #piecetype
+        
+        #meta
+        self.enpassant = None # specifies the file, an int in range(0,7)
+        self.color = WHITE
+        self.castling = B_OOO | B_OO | W_OOO | W_OO
+        self.hasCastled = [False, False]
+        self.fifty = 0
+
+        self.variant = STANDARD_CHESS
+
+    
+    def UpdateFromPieceboards(self):
+        self.board = sum(self.pieceBoards[0] + self.pieceBoards[1])
+        self.teamBoards[WHITE] = sum(self.pieceBoards[WHITE])
+        self.teamBoards[BLACK] = sum(self.pieceBoards[BLACK])
+        self.kings[WHITE] = self.pieceBoards[WHITE][KING]
+        self.kings[BLACK] = self.pieceBoards[BLACK][KING]
+        self._makeSquaresFromPieceboards()
+
+    def _makeBitboardsFromSquares(self):
+        for color, pclass in PieceColorTypeTuples:
+            pType = TupleColorClassToType[color][pclass]
+            
+            bboard = 0
+            for f, r in itertools.product(xrange(8), xrange(8)):
+                if self.squares[f][r] == pType:
+                    board = setBit(bboard, tbl8x8To64[f][r], 1)
+            self.pieceBoards[color][pclass] = board
+
+        self.teamBoards[WHITE] = reduce(lambda res, n: res & n, self.pieceBoards[WHITE])
+        self.teamBoards[BLACK] = reduce(lambda res, n: res & n, self.pieceBoards[BLACK])
+
+        self.board = self.teamBoards[WHITE] & self.teamBoards[BLACK]    
+        self.kings[WHITE] = self.pieceBoards[WHITE][KING]
+        self.kings[BLACK] = self.pieceBoards[BLACK][KING]
+
+    def _makeSquaresFromPieceboards(self):
+        from console import BoardSquaresToString
+        from console import BBoardToString
+        from console import ZBoardBitboardsToString
+        for color, piece in PieceColorClassTuples:
+            positions = ToSquares(self.pieceBoards[color][piece])
+            for pos in positions:
+                f, r = pos
+                _p = TupleColorClassToType[color][piece]
+                self.squares[f][r] = _p
+
+    
+    #an in-place operation
+    def applyMove(self, move):
+        pass
+
+    #an in-place operation
+    def unapplyMove(self, move):
+        pass
+
+    def clone (self):
+        copy = ZBoard(self.variant)
+        
+        copy.board = self.board
+        copy.teamBoards = self.teamBoards
+        copy.pieceBoards = self.pieceBoards
+        copy.kings = self.kings
+
+        copy.enpassant = self.enpassant
+        copy.color = self.color
+        copy.castling = self.castling
+        copy.hasCastled = self.hasCastled
+        copy.fifty = self.fifty
+        
+        return copy
+
+#    def IsChecked (self):
+#        if self.checked == None:
+#            kingpos = self.kings[self.color]
+#            self.checked = isAttacked (self, kingcord, 1-self.color)
+#        return self.checked
+#    
+#    def opIsChecked (self):
+#        raise Exception()
+#        if self.opchecked == None:
+#            kingcord = self.kings[1-self.color]
+#            self.opchecked = isAttacked (self, kingcord, self.color)
+#        return self.opchecked
+
+    def AddPiece(self, pos64, pieceType):
+        from console import BBoardToString
+        color, pClass = TypeToTupleColorClass[pieceType]
+        pieceBoard = self.pieceBoards[color][pClass]
+        pieceBoard = setBit(pieceBoard, pos64, True)
+        self.pieceBoards[color][pClass] = pieceBoard
+        self.UpdateFromPieceboards()
+
+    def RemovePiece(self, pos64):
+        subtractBBoard = 1 << pos64 
+        for color, pClass in itertools.product( [WHITE, BLACK], PieceClasses) :
+            pBoard = self.pieceBoards[color][pClass] 
+            if pBoard & subtractBBoard:
+                self.pieceBoards[color][pClass] = pBoard & (~substractBBoard)
+                self.UpdateFromPieceboards()
+                return TupleColorClassToType[color][pClass]
+
+    def SetCastling (self, castling):
+        if self.castling == castling: return
+        
+        if castling & W_OO != self.castling & W_OO:
+            pass
+            #self.hash ^= W_OOHash
+        if castling & W_OOO != self.castling & W_OOO:
+            pass
+            #self.hash ^= W_OOOHash
+        if castling & B_OO != self.castling & B_OO:
+            pass
+            #self.hash ^= B_OOHash
+        if castling & B_OOO != self.castling & B_OOO:
+            pass
+            #self.hash ^= B_OOOHash
+            
+        self.castling = castling
+    
+    def SetEnpassant (self, epcord):
+        if self.enpassant == epcord: return
+        #if self.enpassant != None:
+        #    self.hash ^= epHashes[self.enpassant]
+        #if epcord != None:
+        #    self.hash ^= epHashes[epcord]
+        self.enpassant = epcord
+   
+    def Move (self, fcord, tcord, ):
+        """ Moves the piece at fcord to tcord. """
+        pType = self.RemovePiece(self, fcord) 
+        self.AddPiece(self, tcord, pType)
+    
+    def SetColor (self, color):
+        if color == self.color: return
+        self.color = color
+        #self.hash ^= colorHash
+        #self.pawnhash ^= colorHash
+    

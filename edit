@@ -1,0 +1,1 @@
+vim board.py -c "tabe butils.py" -c "tabe console.py" -c "tabe search.py" -c "tabe debug.py" -c "tabe moves.py" -c "tabe const.py" -c "tabe fen.py" -c "engine.py"
